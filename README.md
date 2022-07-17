@@ -27,7 +27,7 @@
 
 ### 带有回链可随时回顾巩固
 
-- ![](https://notetocard.oss-cn-hangzhou.aliyuncs.com/siyuanntc3.gif)
+- [尺寸过大点击观看](https://notetocard.oss-cn-hangzhou.aliyuncs.com/siyuanntc5.gif)
 
 ## 使用方法
 - 第一步
