@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>NoteToCard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<style type="text/css">
+    html {
+        width: 100%;
+        height: 100%;
+    }
+
+    body {
+        width: calc(100% - 24px);
+        height: calc(100% - 16px);
+    }
+
+    #container {
+        width: 100%;
+        height: 100%;
+
+        display: flex;
+        flex-flow: column;
+    }
+
+    #block-markdown {
+        width: 100%;
+        flex: 1;
+    }
+
+    input {
+        width: 95%;
+    }
+
+</style>
+
+<body>
+    <div id="container">
+        <table id="table">
+            <tr>
+                <td><label title="NoteToCard 笔记制卡服务 URL">服务</label></td>
+                <td><input id="ntc-server" type="text" placeholder="http(s)://host:port/path" value="http://106.52.132.84:8080/obsidian"></input></td>
+                <td><label title="NoteToCard 制卡类型">类型</label></td>
+                <td>
+                    <select id="ntc-handler">
+                        <option selected>NoteToCard</option>
+                    </select>
+                </td>
+            </tr>
+
+            <tr>
+                <td><label title="NoteToCard 用户邮箱">邮箱</label></td>
+                <td><input id="ntc-email" type="text" placeholder=""></input></td>
+                <td>
+                    <labell title="NoteToCard 用户密码">密码</label>
+                </td>
+                <td><input id="ntc-password" type="password"></input></td>
+            </tr>
+            <tr>
+                <td><label title="块 ID / 块超链接">块ID</label></td>
+                <td><input id="block-id" type="text" placeholder="00000000000000-xxxxxxx"></input></td>
+                <td><label title="卡片标题">标题</label></td>
+                <td><input id="block-title" type="text" placeholder="卡片标题"></input></td>
+            </tr>
+            <tr>
+                <td><button id="button-open" title="在新窗口打开">打开</button></td>
+                <td>
+                    <button id="button-preview" title="预览 markdown 源代码">预览</button>
+                    <button id="button-convert" title="提交 markdown 源代码至 NoteToCard 服务器以制卡" disabled>制卡</button>
+                </td>
+            </tr>
+        </table>
+        <textarea id="block-markdown" placeholder="<markdown 源代码>"></textarea>
+    </div>
+</body>
+
+<script type="text/javascript">
+    (async () => {
+        const ntc_server = document.getElementById('ntc-server')
+        const ntc_handler = document.getElementById('ntc-handler')
+        const ntc_email = document.getElementById('ntc-email')
+        const ntc_password = document.getElementById('ntc-password')
+
+        const block_id = document.getElementById('block-id')
+        const block_title = document.getElementById('block-title')
+        const block_markdown = document.getElementById('block-markdown')
+
+        const button_open = document.getElementById('button-open')
+        const button_preview = document.getElementById('button-preview')
+        const button_convert = document.getElementById('button-convert')
+
+        const url = new URL(window.location.href);
+        let local_config = JSON.parse(window.localStorage.getItem('NoteToCard'));
+        const config = {
+            server: (local_config && local_config.server) || ntc_server.value,
+            handler: (local_config && local_config.handler) || ntc_handler.value,
+            email: (local_config && local_config.email) || ntc_email.value,
+            password: (local_config && local_config.password) || ntc_password.value,
+            blockId: block_id.value,
+            title: block_title.value,
+            markdown: block_markdown.value
+        };
+        // console.log(config);
+
+        /* 👇思源 API 请求方法👇 */
+        /* siyuan 请求 */
+        async function siyuanRequest(url, data, token) {
+            let response = await fetch(
+                url,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Token ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                },
+            );
+            if (response.status === 200) response = await response.json();
+            else return null;
+            if (response.code === 0) return response.data;
+            else return null;
+        }
+
+        /* 获取块属性 */
+        async function getBlockAttrs(id, token = null) {
+            return siyuanRequest('/api/attr/getBlockAttrs', { id: id }, token);
+        }
+
+        /* 设置块属性 */
+        async function setBlockAttrs(id, attrs, token = null) {
+            return siyuanRequest('/api/attr/setBlockAttrs', { id: id, attrs: attrs }, token);
+        }
+
+        /* 查询块 */
+        async function queryBlock(id, token = null) {
+            return siyuanRequest(
+                '/api/query/sql',
+                { stmt: `SELECT * FROM blocks WHERE id = '${id}'` },
+                token,
+            );
+        }
+
+        /* 导出文档 Markdown */
+        async function exportMdContent(id, token = null) {
+            return siyuanRequest('/api/export/exportMdContent', { id: id }, token);
+        }
+
+        /* 推送消息 */
+        async function pushMsg(msg, timeout = 7000, token = null) {
+            return siyuanRequest('/api/notification/pushMsg', {
+                msg: msg,
+                timeout: timeout,
+            }, token);
+        }
+
+        /* 推送错误消息 */
+        async function pushErrMsg(msg, timeout = 7000, token = null) {
+            return siyuanRequest('/api/notification/pushErrMsg', {
+                msg: msg,
+                timeout: timeout,
+            }, token);
+        }
+        /* 👆思源 API 请求方法👆 */
+
+        /* 👇NoteToCard API 请求方法👇 */
+        async function ntcRequest(url, filename, md, email, password, handler) {
+            let response = await fetch(
+                url,
+                {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: filename,
+                        md: md,
+                        email: email,
+                        password: password,
+                        handler: handler,
+                    }),
+                },
+            );
+            return await response.json();
+        }
+        /* 👆NoteToCard API 请求方法👆 */
+
+        /* 👇在新窗口打开👇 */
+        /**
+         * 新窗口打开
+         * REF https://github.com/Zuoqiu-Yingyi/siyuan-theme-dark-plus/blob/54a6342d711cd5ac31457a830af94d1d39edbdc5/script/module/html.js#L62-L187
+         * @url (string): URL
+         * @urlParams (object): URL 参数
+         * @windowParams (object): 窗体参数
+         * @menuTemplate (object): 窗口菜单栏模板
+         * @return (BrowserWindow): 窗口对象
+         */
+        function openNewWindow(
+            url = window.location.href,
+            urlParams = {},
+            windowParams = {
+                width: 720,
+                height: 480,
+                frame: true, // 是否显示边缘框
+                fullscreen: false, // 是否全屏显示
+                alwaysOnTop: true, // 是否置顶显示
+                autoHideMenuBar: false, // 是否隐藏菜单栏(使用 Alt 显示)
+            },
+            menuTemplate = [
+                // 新窗口菜单模板
+                // REF [菜单项 | Electron](https://www.electronjs.org/zh/docs/latest/api/menu-item)
+                {
+                    label: 'SiYuan',
+                    submenu: [
+                        {
+                            label: 'About SiYuan',
+                            role: 'about',
+                        },
+                        { type: 'separator' },
+                        { role: 'services' },
+                        { type: 'separator' },
+                        {
+                            label: 'Hide SiYuan',
+                            role: 'hide',
+                        },
+                        { role: 'hideOthers' },
+                        { role: 'unhide' },
+                        { type: 'separator' },
+                        {
+                            label: 'Quit SiYuan',
+                            role: 'quit',
+                        },
+                    ],
+                },
+                {
+                    role: 'editMenu',
+                    submenu: [
+                        { role: 'selectAll' },
+                        { role: 'cut' },
+                        { role: 'copy' },
+                        { role: 'paste' },
+                        { role: 'pasteAndMatchStyle', accelerator: 'CmdOrCtrl+Shift+V' },
+                        { type: 'separator' },
+                        { role: 'toggleSpellChecker' },
+                    ],
+                },
+                {
+                    role: 'viewMenu',
+                    submenu: [
+                        { role: 'resetZoom' },
+                        { role: 'zoomIn', accelerator: 'CmdOrCtrl+=' },
+                        { role: 'zoomOut' },
+                    ],
+                },
+                {
+                    role: 'windowMenu',
+                    submenu: [
+                        { role: 'minimize' },
+                        { role: 'zoom' },
+                        { role: 'togglefullscreen' },
+                        { type: 'separator' },
+                        { role: 'toggledevtools' },
+                        { type: 'separator' },
+                        { role: 'front' },
+                        { type: 'separator' },
+                        { role: 'reload', accelerator: 'F5' },
+                        { role: 'forcereload', accelerator: 'CmdOrCtrl+F5' },
+                        { role: 'close' },
+                        { type: 'separator' },
+                        {
+                            label: 'Pinned',
+                            click: (menuItem, browserWindow, event) => {
+                                if (browserWindow) browserWindow.setAlwaysOnTop(!browserWindow.isAlwaysOnTop());
+                            },
+                            type: 'checkbox',
+                            checked: true,
+                            // REF [快捷键 | Electron](https://www.electronjs.org/zh/docs/latest/api/accelerator)
+                            accelerator: 'Alt+Shift+P',
+                        },
+                    ],
+                },
+            ],
+        ) {
+            try {
+                url = new URL(url);
+                // 设置 URL 参数
+                for (const param in urlParams) {
+                    url.searchParams.set(param, urlParams[param]);
+                }
+                // 打开新窗口
+                try {
+                    const {
+                        BrowserWindow,
+                        Menu,
+                    } = window.top.require('@electron/remote');
+                    // 新建窗口(Electron 环境)
+                    var newWin = new BrowserWindow(windowParams);
+                    const menu = Menu.buildFromTemplate(menuTemplate);
+
+                    // console.log(menu);
+                    console.log(url.href);
+
+                    // if (url.protocol === 'file:') newWin.loadFile(url.href.substr(8));
+                    // else newWin.loadURL(url.href);
+                    newWin.setMenu(menu);
+                    newWin.loadURL(url.href);
+                    // REF [Event: 'console-message'​](https://www.electronjs.org/docs/latest/api/web-contents#event-console-message)
+                    newWin.on('closed', () => {
+                        newWin = null;
+                    })
+                    return newWin;
+                }
+                catch (err) {
+                    console.warn(err);
+                    // 新建标签页(Web 环境)
+                    // window.open(url.href, "_blank");
+                    window.open(url.href, "popup");
+                    return null;
+                }
+            }
+            catch (err) {
+                console.error(err);
+                return null;
+            }
+        }
+        /* 👆在新窗口打开👆 */
+
+        /* 👇事件处理方法👇 */
+        /* 保存配置 */
+        async function saveConfig() {
+            config.server = ntc_server.value;
+            config.handler = ntc_handler.value;
+            config.email = ntc_email.value;
+            config.password = ntc_password.value;
+
+            const attrs = {
+                'custom-ntc-server': config.server,
+                'custom-ntc-handler': config.handler,
+                'custom-ntc-email': config.email,
+                'custom-ntc-password': config.password,
+            };
+
+            window.localStorage.setItem(
+                'NoteToCard',
+                JSON.stringify({
+                    server: config.server,
+                    handler: config.handler,
+                    email: config.email,
+                    password: config.password,
+                }),
+            );
+            await setBlockAttrs(widget_id, attrs);
+        }
+
+        /* 👆事件处理方法👆 */
+
+
+        /* 获取保存在挂件块属性中的配置 */
+        var widget_id = url.searchParams.get('id');
+
+        if (widget_id == null) {
+            let node = window.frameElement != null ? window.frameElement.parentElement.parentElement : null;
+            if (node != null) widget_id = node.getAttribute('data-node-id');
+        }
+        if (widget_id) { // 加载保存在挂件块属性中的配置
+            const attrs = await getBlockAttrs(widget_id);
+            /* 使用挂件块属性中的内容覆盖默认配置 */
+            if (attrs) {
+                config.server = attrs['custom-ntc-server'] || config.server;
+                config.handler = attrs['custom-ntc-handler'] || config.handler;
+                config.email = attrs['custom-ntc-email'] || config.email;
+                config.password = attrs['custom-ntc-password'] || config.password;
+
+                ntc_server.value = config.server;
+                ntc_handler.value = config.handler;
+                ntc_email.value = config.email;
+                ntc_password.value = config.password;
+            }
+            /* 监听 input 元素, 在失去焦点时保存 */
+            ntc_server.onblur = saveConfig;
+            ntc_handler.onblur = saveConfig;
+            ntc_email.onblur = saveConfig;
+            ntc_password.onblur = saveConfig;
+        }
+
+        /* 监听打开按钮单击事件 */
+        button_open.onclick = () => openNewWindow(url.href, { id: widget_id });
+
+        /* 监听预览按钮单击事件 */
+        button_preview.onclick = async () => {
+            let id = block_id.value;
+            /* 判断 ID 是否合法(不合法消息提示) */
+            switch (true) {
+                case /^\d{14}\-[0-9a-z]{7}$/.test(id):
+                    break;
+                case /^siyuan:\/\/blocks\/(\d{14}\-[0-9a-z]{7})\/*(?:(?:\?)(\w+=\w+)(?:(?:\&)(\w+=\w+))*)?$/.test(id):
+                    id = id.match(/^siyuan:\/\/blocks\/(\d{14}\-[0-9a-z]{7})\/*(?:(?:\?)(\w+=\w+)(?:(?:\&)(\w+=\w+))*)?$/)[1];
+                    break;
+                default:
+                    id = null;
+            }
+            if (id) {
+                let block = await queryBlock(id);
+                if (block && block.length == 1) {
+                    block = block[0];
+                    /* 判断 ID 是文档 ID 还是块 ID */
+                    switch (block.type) {
+                        case 'd': // 文档块
+                            const doc = await exportMdContent(id);
+                            if (doc) {
+                                config.title = block.content;
+                                config.markdown = doc.content;
+                            }
+                            else {
+                                await pushErrMsg(`NoteToCard: ID=${id} 的文档导出 markdown 失败`);
+                                return null;
+                            }
+                            break;
+                        default:
+                            config.title = block.name
+                                || block.alias
+                                || block.memo
+                                || block.fcontent
+                                || block.content;
+                            config.markdown = block.markdown;
+                            break;
+                    }
+                }
+                else {
+                    await pushErrMsg(`NoteToCard: ID=${id} 的块不存在`);
+                    return null;
+                }
+                /* 获得对应块标题并显示 */
+                block_title.value = config.title;
+                /* 获得对应块 Markdown 源代码并写入 textarea */
+                block_markdown.value = config.markdown;
+            }
+            else {
+                await pushErrMsg(`NoteToCard: 块 ID 格式错误`);
+                return null;
+            }
+            button_convert.disabled = false;
+        };
+
+        /* 监听转换按钮单击事件 */
+        button_convert.onclick = async () => {
+            config.server = ntc_server.value;
+            config.title = block_title.value;
+            config.markdown = block_markdown.value;
+            config.email = ntc_email.value;
+            config.password = ntc_password.value;
+            config.handler = ntc_handler.value;
+
+            /* 判断字段是否填写完整 */
+            if (config.server
+                && config.title
+                && config.markdown
+                && config.email
+                && config.password
+                && config.handler
+            ) {
+                /* 发送请求 */
+                const response = await ntcRequest(
+                    config.server,
+                    config.title,
+                    config.markdown,
+                    config.email,
+                    config.password,
+                    config.handler,
+                );
+                /* 判断是否发送成功, 推送消息提示 */
+                if (response.status === true || response.status >= 200 && response.status < 300) {
+                    await pushMsg(`NoteToCard: ${response.msg}`);
+                    return null;
+                }
+                else {
+                    await pushErrMsg(`NoteToCard: ${response.error || response.msg}`);
+                    return null;
+                }
+            }
+            else {
+                switch ('') {
+                    case config.server:
+                        await pushErrMsg(`NoteToCard: 服务 字段为空`);
+                        break;
+                    case config.title:
+                        await pushErrMsg(`NoteToCard: 标题 字段为空`);
+                        break;
+                    case config.markdown:
+                        await pushErrMsg(`NoteToCard: markdown 字段为空`);
+                        break;
+                    case config.email:
+                        await pushErrMsg(`NoteToCard: 邮箱 字段为空`);
+                        break;
+                    case config.password:
+                        await pushErrMsg(`NoteToCard: 密码 字段为空`);
+                        break;
+                    case config.handler:
+                        await pushErrMsg(`NoteToCard: 方法 字段为空`);
+                        break;
+                }
+                return;
+            }
+        }
+
+        /* 监听 markdown 预览文本框内容更改 */
+        block_markdown.onchange = () => {
+            if (block_markdown.value) {
+                button_convert.disabled = false;
+            }
+            else {
+                button_convert.disabled = true;
+            }
+        }
+    })();
+</script>
+
+</html>
