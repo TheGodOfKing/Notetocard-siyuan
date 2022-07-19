@@ -1,5 +1,5 @@
 # Notetocard-siyuan
-- siyuan笔记的anki和Supermemo18制卡插件
+- siyuan笔记的anki制卡和Supermemo18制卡插件
 - 本插件由Zuoqiu-Yingyi提供❤❤❤❤❤❤感谢大佬
 ## Notetocard的优势
 
@@ -8,6 +8,13 @@
 - 截至现在以支持22种卡片满足大部分人的使用需求后续在不断开发中
 
 -  ![](https://notetocard.oss-cn-hangzhou.aliyuncs.com/Pasted%20image%2020220717132304.png)
+
+- 更新日志
+  
+	- 0.1.8 增加批量制卡，sm材料卡，导出opml的功能
+	  
+	  ![](https://notetocard.oss-cn-hangzhou.aliyuncs.com/4D68F927D4E2B1D1BFDA8B5402A70333.png)
+
 
 ### 可控的制卡粒度
 
@@ -27,7 +34,7 @@
 
 ### 带有回链可随时回顾巩固
 
-- [尺寸过大点击观看](https://notetocard.oss-cn-hangzhou.aliyuncs.com/siyuanntc5.gif)
+- [尺寸过大请点击查看](https://test-1308916881.cos.ap-chengdu.myqcloud.com/siyuanntc5.gif)
 
 ## 使用方法
 - 第一步
